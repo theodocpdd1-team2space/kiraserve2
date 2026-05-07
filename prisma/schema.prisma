@@ -1,0 +1,147 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ChurchStatus {
+  TRIAL
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+  SUSPENDED
+}
+
+enum ChurchRole {
+  CHURCH_OWNER
+  CHURCH_ADMIN
+  DIVISION_COORDINATOR
+  SERVANT
+  MEMBER
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  INACTIVE
+  CANCELLED
+}
+
+enum PaymentStatus {
+  DUMMY
+  MANUAL_PENDING
+  PAID
+  FAILED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String?
+  email        String   @unique
+  phone        String?
+  passwordHash String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  churchMembers ChurchMember[]
+}
+
+model Church {
+  id        String       @id @default(cuid())
+  name      String
+  slug      String       @unique
+  address   String?
+  picName   String?
+  picEmail  String?
+  picPhone  String?
+  status    ChurchStatus @default(TRIAL)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  members             ChurchMember[]
+  divisions           ChurchDivision[]
+  subscriptions       Subscription[]
+  activationRequests  ActivationRequest[]
+}
+
+model ChurchMember {
+  id        String     @id @default(cuid())
+  churchId  String
+  userId    String
+  role      ChurchRole @default(MEMBER)
+  createdAt DateTime   @default(now())
+
+  church Church @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([churchId, userId])
+  @@index([churchId])
+  @@index([userId])
+}
+
+model ChurchDivision {
+  id        String   @id @default(cuid())
+  churchId  String
+  name      String
+  picName   String?
+  picPhone  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  church Church @relation(fields: [churchId], references: [id], onDelete: Cascade)
+
+  @@index([churchId])
+}
+
+model Plan {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  name         String
+  price        Int
+  billingCycle String   @default("monthly")
+  description  String?
+  features     Json?
+  createdAt    DateTime @default(now())
+
+  subscriptions      Subscription[]
+  activationRequests ActivationRequest[]
+}
+
+model Subscription {
+  id                 String             @id @default(cuid())
+  churchId            String
+  planCode            String
+  status              SubscriptionStatus @default(TRIALING)
+  trialStartedAt      DateTime?
+  trialEndsAt         DateTime?
+  currentPeriodStart  DateTime?
+  currentPeriodEnd    DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  church Church @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  plan   Plan   @relation(fields: [planCode], references: [code])
+
+  @@index([churchId])
+  @@index([planCode])
+}
+
+model ActivationRequest {
+  id               String        @id @default(cuid())
+  churchId          String?
+  planCode          String
+  paymentStatus     PaymentStatus @default(DUMMY)
+  activationStatus  String        @default("draft")
+  rawPayload        Json?
+  createdAt         DateTime      @default(now())
+
+  church Church? @relation(fields: [churchId], references: [id], onDelete: SetNull)
+  plan   Plan    @relation(fields: [planCode], references: [code])
+
+  @@index([churchId])
+  @@index([planCode])
+}
