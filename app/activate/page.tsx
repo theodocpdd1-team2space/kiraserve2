@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -43,12 +43,15 @@ export default function ActivatePage() {
 }
 
 function ActivateContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const planCode = searchParams.get("plan") || "growth";
   const planName = planMap[planCode] || "Growth";
 
   const [step, setStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const [churchName, setChurchName] = useState("");
   const [churchAddress, setChurchAddress] = useState("");
@@ -100,9 +103,63 @@ function ActivateContent() {
     setDivisions((current) => current.filter((item) => item.id !== id));
   };
 
-  const startActivation = () => {
+  const submitActivation = async () => {
+    setErrorMessage("");
+
+    if (password !== confirmPassword) {
+      setErrorMessage("Password dan confirm password belum sama.");
+      setStep(4);
+      return;
+    }
+
+    setIsSubmitting(true);
     setStep(5);
-    setTimeout(() => setStep(6), 5600);
+
+    try {
+      const response = await fetch("/api/activate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          planCode,
+          churchName,
+          churchAddress,
+          picEmail,
+          picPhone,
+          adminName,
+          password,
+          confirmPassword,
+          divisions: divisions
+            .filter((division) => division.name.trim())
+            .map((division) => ({
+              name: division.name.trim(),
+              picName: division.picName.trim(),
+              picPhone: division.picPhone.trim(),
+            })),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.ok) {
+        setErrorMessage(result.message || "Aktivasi gagal. Coba lagi.");
+        setStep(4);
+        setIsSubmitting(false);
+        return;
+      }
+
+      setStep(6);
+
+      setTimeout(() => {
+        router.push(result.redirectTo || "/dashboard");
+      }, 1200);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("Terjadi kesalahan koneksi saat aktivasi.");
+      setStep(4);
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -114,10 +171,16 @@ function ActivateContent() {
           </Link>
 
           <div className="hidden items-center gap-8 lg:flex">
-            <Link href="/pricing" className="text-[13px] font-medium text-black/50 hover:text-black">
+            <Link
+              href="/pricing"
+              className="text-[13px] font-medium text-black/50 hover:text-black"
+            >
               Pricing
             </Link>
-            <Link href={`/checkout?plan=${planCode}`} className="text-[13px] font-medium text-black/50 hover:text-black">
+            <Link
+              href={`/checkout?plan=${planCode}`}
+              className="text-[13px] font-medium text-black/50 hover:text-black"
+            >
               Checkout
             </Link>
             <span className="text-[13px] font-medium text-black">
@@ -185,10 +248,30 @@ function ActivateContent() {
                 </p>
 
                 <div className="mt-8 space-y-2">
-                  <StepItem number="1" title="Profil Gereja" active={step === 1} done={step > 1} />
-                  <StepItem number="2" title="Akun Admin" active={step === 2} done={step > 2} />
-                  <StepItem number="3" title="Divisi Awal" active={step === 3} done={step > 3} />
-                  <StepItem number="4" title="Review" active={step === 4} done={step > 4} />
+                  <StepItem
+                    number="1"
+                    title="Profil Gereja"
+                    active={step === 1}
+                    done={step > 1}
+                  />
+                  <StepItem
+                    number="2"
+                    title="Akun Admin"
+                    active={step === 2}
+                    done={step > 2}
+                  />
+                  <StepItem
+                    number="3"
+                    title="Divisi Awal"
+                    active={step === 3}
+                    done={step > 3}
+                  />
+                  <StepItem
+                    number="4"
+                    title="Review"
+                    active={step === 4}
+                    done={step > 4}
+                  />
                 </div>
 
                 <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
@@ -214,20 +297,59 @@ function ActivateContent() {
 
               <div className="overflow-hidden rounded-[32px] border border-black/[0.08] bg-white shadow-[0_32px_80px_-45px_rgba(0,0,0,0.25)]">
                 <div className="p-8 md:p-10">
+                  {errorMessage && step <= 4 && (
+                    <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-600">
+                      {errorMessage}
+                    </div>
+                  )}
+
                   {step === 1 && (
-                    <StepShell icon={Building2} title="Profil Gereja" desc="Isi data dasar gereja dan kontak utama PIC sistem.">
-                      <Field label="Nama Gereja / Komunitas" placeholder="Misal: Gereja Satu Jam Saja" value={churchName} onChange={setChurchName} />
-                      <Field label="Alamat Gereja" placeholder="Alamat lengkap gereja" value={churchAddress} onChange={setChurchAddress} />
+                    <StepShell
+                      icon={Building2}
+                      title="Profil Gereja"
+                      desc="Isi data dasar gereja dan kontak utama PIC sistem."
+                    >
+                      <Field
+                        label="Nama Gereja / Komunitas"
+                        placeholder="Misal: Gereja Satu Jam Saja"
+                        value={churchName}
+                        onChange={setChurchName}
+                      />
+                      <Field
+                        label="Alamat Gereja"
+                        placeholder="Alamat lengkap gereja"
+                        value={churchAddress}
+                        onChange={setChurchAddress}
+                      />
                       <div className="grid gap-5 md:grid-cols-2">
-                        <Field label="Email PIC Gereja" placeholder="admin@gereja.com" value={picEmail} onChange={setPicEmail} />
-                        <Field label="Nomor PIC Gereja" placeholder="0895xxxxxxxx" value={picPhone} onChange={setPicPhone} />
+                        <Field
+                          label="Email PIC Gereja"
+                          placeholder="admin@gereja.com"
+                          value={picEmail}
+                          onChange={setPicEmail}
+                        />
+                        <Field
+                          label="Nomor PIC Gereja"
+                          placeholder="0895xxxxxxxx"
+                          value={picPhone}
+                          onChange={setPicPhone}
+                        />
                       </div>
                     </StepShell>
                   )}
 
                   {step === 2 && (
-                    <StepShell icon={UserRound} title="Buat Akun Admin" desc="Akun ini akan menjadi Church Owner untuk workspace gereja.">
-                      <Field label="Nama Admin" placeholder="Nama PIC / admin utama" value={adminName} onChange={setAdminName} />
+                    <StepShell
+                      icon={UserRound}
+                      title="Buat Akun Admin"
+                      desc="Akun ini akan menjadi Church Owner untuk workspace gereja."
+                    >
+                      <Field
+                        label="Nama Admin"
+                        placeholder="Nama PIC / admin utama"
+                        value={adminName}
+                        onChange={setAdminName}
+                      />
 
                       <div>
                         <label className="mb-2 block text-sm font-semibold text-black/65">
@@ -237,7 +359,9 @@ function ActivateContent() {
                           <input
                             type={showPassword ? "text" : "password"}
                             value={password}
-                            onChange={(event) => setPassword(event.target.value)}
+                            onChange={(event) =>
+                              setPassword(event.target.value)
+                            }
                             placeholder="Minimal 8 karakter"
                             className="w-full rounded-2xl border border-black/[0.08] bg-[#F9FAF9] px-4 py-4 pr-12 outline-none transition placeholder:text-black/30 focus:border-black focus:bg-white focus:ring-4 focus:ring-[#D4F93A]/25"
                           />
@@ -246,23 +370,39 @@ function ActivateContent() {
                             onClick={() => setShowPassword((value) => !value)}
                             className="absolute right-4 top-1/2 -translate-y-1/2 text-black/35"
                           >
-                            {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                            {showPassword ? (
+                              <EyeOff className="h-5 w-5" />
+                            ) : (
+                              <Eye className="h-5 w-5" />
+                            )}
                           </button>
                         </div>
                       </div>
 
-                      <Field label="Confirm Password" placeholder="Ulangi password" type={showPassword ? "text" : "password"} value={confirmPassword} onChange={setConfirmPassword} />
+                      <Field
+                        label="Confirm Password"
+                        placeholder="Ulangi password"
+                        type={showPassword ? "text" : "password"}
+                        value={confirmPassword}
+                        onChange={setConfirmPassword}
+                      />
 
-                      {password && confirmPassword && password !== confirmPassword && (
-                        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-600">
-                          Password dan confirm password belum sama.
-                        </div>
-                      )}
+                      {password &&
+                        confirmPassword &&
+                        password !== confirmPassword && (
+                          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-600">
+                            Password dan confirm password belum sama.
+                          </div>
+                        )}
                     </StepShell>
                   )}
 
                   {step === 3 && (
-                    <StepShell icon={Network} title="Tambahkan Divisi" desc="Tambahkan divisi awal dan PIC divisi. Bisa diedit lagi nanti.">
+                    <StepShell
+                      icon={Network}
+                      title="Tambahkan Divisi"
+                      desc="Tambahkan divisi awal dan PIC divisi. Bisa diedit lagi nanti."
+                    >
                       <div>
                         <p className="mb-3 text-[12px] font-semibold uppercase tracking-[0.18em] text-black/30">
                           Quick Add
@@ -283,7 +423,10 @@ function ActivateContent() {
 
                       <div className="space-y-4">
                         {divisions.map((division, index) => (
-                          <div key={division.id} className="rounded-3xl border border-black/[0.08] bg-[#F9FAF9] p-5">
+                          <div
+                            key={division.id}
+                            className="rounded-3xl border border-black/[0.08] bg-[#F9FAF9] p-5"
+                          >
                             <div className="mb-4 flex items-center justify-between">
                               <p className="font-bold">Divisi {index + 1}</p>
                               {divisions.length > 1 && (
@@ -298,9 +441,42 @@ function ActivateContent() {
                             </div>
 
                             <div className="grid gap-3 md:grid-cols-3">
-                              <input value={division.name} onChange={(e) => updateDivision(division.id, "name", e.target.value)} placeholder="Nama divisi" className="rounded-2xl border border-black/[0.08] bg-white px-4 py-3 outline-none placeholder:text-black/30 focus:border-black" />
-                              <input value={division.picName} onChange={(e) => updateDivision(division.id, "picName", e.target.value)} placeholder="Nama PIC" className="rounded-2xl border border-black/[0.08] bg-white px-4 py-3 outline-none placeholder:text-black/30 focus:border-black" />
-                              <input value={division.picPhone} onChange={(e) => updateDivision(division.id, "picPhone", e.target.value)} placeholder="Nomor PIC" className="rounded-2xl border border-black/[0.08] bg-white px-4 py-3 outline-none placeholder:text-black/30 focus:border-black" />
+                              <input
+                                value={division.name}
+                                onChange={(event) =>
+                                  updateDivision(
+                                    division.id,
+                                    "name",
+                                    event.target.value
+                                  )
+                                }
+                                placeholder="Nama divisi"
+                                className="rounded-2xl border border-black/[0.08] bg-white px-4 py-3 outline-none placeholder:text-black/30 focus:border-black"
+                              />
+                              <input
+                                value={division.picName}
+                                onChange={(event) =>
+                                  updateDivision(
+                                    division.id,
+                                    "picName",
+                                    event.target.value
+                                  )
+                                }
+                                placeholder="Nama PIC"
+                                className="rounded-2xl border border-black/[0.08] bg-white px-4 py-3 outline-none placeholder:text-black/30 focus:border-black"
+                              />
+                              <input
+                                value={division.picPhone}
+                                onChange={(event) =>
+                                  updateDivision(
+                                    division.id,
+                                    "picPhone",
+                                    event.target.value
+                                  )
+                                }
+                                placeholder="Nomor PIC"
+                                className="rounded-2xl border border-black/[0.08] bg-white px-4 py-3 outline-none placeholder:text-black/30 focus:border-black"
+                              />
                             </div>
                           </div>
                         ))}
@@ -317,21 +493,45 @@ function ActivateContent() {
                   )}
 
                   {step === 4 && (
-                    <StepShell icon={Users2} title="Review Aktivasi" desc="Cek ulang data sebelum workspace trial dibuat.">
+                    <StepShell
+                      icon={Users2}
+                      title="Review Aktivasi"
+                      desc="Cek ulang data sebelum workspace trial dibuat."
+                    >
                       <div className="grid gap-3">
                         <ReviewRow label="Plan" value={planName} />
-                        <ReviewRow label="Nama Gereja" value={churchName || "-"} />
-                        <ReviewRow label="Alamat" value={churchAddress || "-"} />
-                        <ReviewRow label="PIC Email" value={picEmail || "-"} />
-                        <ReviewRow label="PIC Phone" value={picPhone || "-"} />
+                        <ReviewRow
+                          label="Nama Gereja"
+                          value={churchName || "-"}
+                        />
+                        <ReviewRow
+                          label="Alamat"
+                          value={churchAddress || "-"}
+                        />
+                        <ReviewRow
+                          label="PIC Email"
+                          value={picEmail || "-"}
+                        />
+                        <ReviewRow
+                          label="PIC Phone"
+                          value={picPhone || "-"}
+                        />
                         <ReviewRow label="Admin" value={adminName || "-"} />
-                        <ReviewRow label="Divisi" value={`${divisions.filter((item) => item.name).length} divisi`} />
+                        <ReviewRow
+                          label="Divisi"
+                          value={`${
+                            divisions.filter((item) => item.name).length
+                          } divisi`}
+                        />
                       </div>
 
                       <div className="rounded-3xl bg-[#D4F93A]/25 p-5">
-                        <p className="font-bold">Trial 14 hari akan aktif setelah aktivasi selesai.</p>
+                        <p className="font-bold">
+                          Trial 14 hari akan aktif setelah aktivasi selesai.
+                        </p>
                         <p className="mt-2 text-sm leading-relaxed text-black/50">
-                          Setelah UI flow aman, step ini akan disambungkan ke PostgreSQL + Prisma.
+                          Setelah aktivasi sukses, workspace akan dibuat di
+                          database dan diarahkan ke dashboard gereja.
                         </p>
                       </div>
                     </StepShell>
@@ -375,15 +575,8 @@ function ActivateContent() {
                         Workspace siap.
                       </h2>
                       <p className="mx-auto mt-5 max-w-md leading-relaxed text-black/50">
-                        Sekarang lanjut ke dashboard KiraServe dan mulai kelola pelayanan gerejamu.
+                        Mengarahkan ke dashboard gereja...
                       </p>
-
-                      <Link
-                        href="/dashboard"
-                        className="mt-8 inline-flex items-center gap-2 rounded-full bg-black px-8 py-4 font-bold text-white"
-                      >
-                        Masuk Dashboard <ArrowRight className="h-4 w-4" />
-                      </Link>
                     </div>
                   )}
                 </div>
@@ -392,7 +585,10 @@ function ActivateContent() {
                   <div className="flex items-center justify-between border-t border-black/[0.06] bg-[#F9FAF9] px-8 py-5">
                     <button
                       type="button"
-                      onClick={() => setStep((value) => Math.max(1, value - 1))}
+                      onClick={() => {
+                        setErrorMessage("");
+                        setStep((value) => Math.max(1, value - 1));
+                      }}
                       className={`rounded-full px-5 py-3 text-sm font-semibold text-black/45 hover:text-black ${
                         step === 1 ? "invisible" : ""
                       }`}
@@ -402,16 +598,30 @@ function ActivateContent() {
 
                     <button
                       type="button"
+                      disabled={isSubmitting}
                       onClick={() => {
+                        setErrorMessage("");
                         if (step < 4) setStep((value) => value + 1);
-                        else startActivation();
+                        else submitActivation();
                       }}
-                      className={`inline-flex items-center gap-2 rounded-full px-7 py-4 font-bold transition ${
-                        step === 4 ? "bg-[#D4F93A] text-black" : "bg-black text-white"
+                      className={`inline-flex items-center gap-2 rounded-full px-7 py-4 font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                        step === 4
+                          ? "bg-[#D4F93A] text-black"
+                          : "bg-black text-white"
                       }`}
                     >
-                      {step === 4 ? "Aktivasi Sekarang" : "Lanjut"}
-                      {step === 4 ? <Zap className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
+                      {isSubmitting
+                        ? "Memproses..."
+                        : step === 4
+                          ? "Aktivasi Sekarang"
+                          : "Lanjut"}
+                      {isSubmitting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : step === 4 ? (
+                        <Zap className="h-4 w-4" />
+                      ) : (
+                        <ArrowRight className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                 )}
@@ -458,7 +668,11 @@ function StepItem({
     >
       <span
         className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
-          active ? "bg-black text-white" : done ? "bg-[#D4F93A] text-black" : "bg-white/10"
+          active
+            ? "bg-black text-white"
+            : done
+              ? "bg-[#D4F93A] text-black"
+              : "bg-white/10"
         }`}
       >
         {done ? <Check className="h-4 w-4" /> : number}
