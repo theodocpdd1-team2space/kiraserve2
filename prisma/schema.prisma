@@ -23,6 +23,24 @@ enum ChurchRole {
   MEMBER
 }
 
+enum ChurchMemberStatus {
+  INVITED
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum MemberCodeMode {
+  AUTO_GENERATE
+  MANUAL
+  APPROVAL_REQUIRED
+}
+
+enum DivisionMemberRole {
+  COORDINATOR
+  MEMBER
+}
+
 enum SubscriptionStatus {
   TRIALING
   ACTIVE
@@ -51,36 +69,48 @@ model User {
 }
 
 model Church {
-  id        String       @id @default(cuid())
-  name      String
-  slug      String       @unique
-  address   String?
-  picName   String?
-  picEmail  String?
-  picPhone  String?
-  status    ChurchStatus @default(TRIAL)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  id                   String         @id @default(cuid())
+  name                 String
+  slug                 String         @unique
+  address              String?
+  picName              String?
+  picEmail             String?
+  picPhone             String?
+  status               ChurchStatus   @default(TRIAL)
+  memberCodePrefix     String?
+  memberCodeNextNumber Int            @default(1)
+  memberCodeMode       MemberCodeMode @default(AUTO_GENERATE)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
-  members             ChurchMember[]
-  divisions           ChurchDivision[]
-  subscriptions       Subscription[]
-  activationRequests  ActivationRequest[]
+  members            ChurchMember[]
+  divisions          ChurchDivision[]
+  divisionMembers    DivisionMember[]
+  subscriptions      Subscription[]
+  activationRequests ActivationRequest[]
 }
 
 model ChurchMember {
-  id        String     @id @default(cuid())
-  churchId  String
-  userId    String
-  role      ChurchRole @default(MEMBER)
-  createdAt DateTime   @default(now())
+  id         String             @id @default(cuid())
+  churchId   String
+  userId     String
+  memberCode String?
+  role       ChurchRole         @default(MEMBER)
+  status     ChurchMemberStatus @default(ACTIVE)
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @default(now()) @updatedAt
 
   church Church @relation(fields: [churchId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  divisionMembers DivisionMember[]
+
   @@unique([churchId, userId])
+  @@unique([churchId, memberCode])
   @@index([churchId])
   @@index([userId])
+  @@index([status])
+  @@index([memberCode])
 }
 
 model ChurchDivision {
@@ -94,7 +124,29 @@ model ChurchDivision {
 
   church Church @relation(fields: [churchId], references: [id], onDelete: Cascade)
 
+  divisionMembers DivisionMember[]
+
   @@index([churchId])
+}
+
+model DivisionMember {
+  id             String             @id @default(cuid())
+  churchId       String
+  divisionId     String
+  churchMemberId String
+  role           DivisionMemberRole @default(MEMBER)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @default(now()) @updatedAt
+
+  church       Church         @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  division     ChurchDivision @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  churchMember ChurchMember   @relation(fields: [churchMemberId], references: [id], onDelete: Cascade)
+
+  @@unique([divisionId, churchMemberId])
+  @@index([churchId])
+  @@index([divisionId])
+  @@index([churchMemberId])
+  @@index([role])
 }
 
 model Plan {
