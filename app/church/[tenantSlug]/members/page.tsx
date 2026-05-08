@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
+import { requireMembersAccess } from "@/lib/church-access";
 import {
   Archive,
   Mail,
@@ -336,6 +337,7 @@ async function archiveMember(formData: FormData) {
 
 export default async function MembersPage({ params, searchParams }: PageProps) {
   const { tenantSlug } = await params;
+  await requireMembersAccess(tenantSlug);
   const query = (await searchParams) || {};
 
   const q = query.q?.trim() || "";

@@ -197,3 +197,39 @@ model ActivationRequest {
   @@index([churchId])
   @@index([planCode])
 }
+
+model ServingRole {
+  id         String   @id @default(cuid())
+  churchId   String
+  divisionId String
+  name       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  church   Church         @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  division ChurchDivision @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+
+  memberServingRoles MemberServingRole[]
+
+  @@unique([divisionId, name])
+  @@index([churchId])
+  @@index([divisionId])
+}
+
+model MemberServingRole {
+  id             String   @id @default(cuid())
+  churchId       String
+  churchMemberId String
+  servingRoleId  String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  church       Church       @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  churchMember ChurchMember @relation(fields: [churchMemberId], references: [id], onDelete: Cascade)
+  servingRole  ServingRole  @relation(fields: [servingRoleId], references: [id], onDelete: Cascade)
+
+  @@unique([churchMemberId, servingRoleId])
+  @@index([churchId])
+  @@index([churchMemberId])
+  @@index([servingRoleId])
+}
