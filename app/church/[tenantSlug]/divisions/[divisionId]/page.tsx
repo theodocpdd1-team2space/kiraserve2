@@ -11,6 +11,8 @@ import {
   UserPlus,
   UsersRound,
   X,
+  BriefcaseBusiness,
+  BadgeCheck,
 } from "lucide-react";
 import ChurchAppShell from "@/components/ChurchAppShell";
 import { db } from "@/lib/db";
@@ -134,6 +136,39 @@ async function removeDivisionMember(formData: FormData) {
 
   if (!church) return;
 
+  const divisionMember = await db.divisionMember.findFirst({
+    where: {
+      id: divisionMemberId,
+      churchId: church.id,
+      divisionId,
+    },
+    select: {
+      churchMemberId: true,
+    },
+  });
+
+  if (divisionMember) {
+    const divisionServingRoles = await db.servingRole.findMany({
+      where: {
+        churchId: church.id,
+        divisionId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    await db.memberServingRole.deleteMany({
+      where: {
+        churchId: church.id,
+        churchMemberId: divisionMember.churchMemberId,
+        servingRoleId: {
+          in: divisionServingRoles.map((role) => role.id),
+        },
+      },
+    });
+  }
+
   await db.divisionMember.deleteMany({
     where: {
       id: divisionMemberId,
@@ -144,6 +179,172 @@ async function removeDivisionMember(formData: FormData) {
 
   revalidatePath(`/church/${church.slug}/divisions/${divisionId}`);
   revalidatePath(`/church/${church.slug}/members`);
+}
+
+async function createServingRole(formData: FormData) {
+  "use server";
+
+  const tenantSlug = String(formData.get("tenantSlug") || "");
+  const divisionId = String(formData.get("divisionId") || "");
+  const name = String(formData.get("name") || "").trim();
+
+  if (!tenantSlug || !divisionId || !name) return;
+
+  const church = await db.church.findUnique({
+    where: { slug: tenantSlug },
+    select: { id: true, slug: true },
+  });
+
+  if (!church) return;
+
+  const division = await db.churchDivision.findFirst({
+    where: {
+      id: divisionId,
+      churchId: church.id,
+    },
+    select: { id: true },
+  });
+
+  if (!division) return;
+
+  await db.servingRole.upsert({
+    where: {
+      divisionId_name: {
+        divisionId: division.id,
+        name,
+      },
+    },
+    update: {
+      name,
+    },
+    create: {
+      churchId: church.id,
+      divisionId: division.id,
+      name,
+    },
+  });
+
+  revalidatePath(`/church/${church.slug}/divisions/${division.id}`);
+}
+
+async function deleteServingRole(formData: FormData) {
+  "use server";
+
+  const tenantSlug = String(formData.get("tenantSlug") || "");
+  const divisionId = String(formData.get("divisionId") || "");
+  const servingRoleId = String(formData.get("servingRoleId") || "");
+
+  if (!tenantSlug || !divisionId || !servingRoleId) return;
+
+  const church = await db.church.findUnique({
+    where: { slug: tenantSlug },
+    select: { id: true, slug: true },
+  });
+
+  if (!church) return;
+
+  await db.servingRole.deleteMany({
+    where: {
+      id: servingRoleId,
+      churchId: church.id,
+      divisionId,
+    },
+  });
+
+  revalidatePath(`/church/${church.slug}/divisions/${divisionId}`);
+}
+
+async function assignMemberServingRole(formData: FormData) {
+  "use server";
+
+  const tenantSlug = String(formData.get("tenantSlug") || "");
+  const divisionId = String(formData.get("divisionId") || "");
+  const churchMemberId = String(formData.get("churchMemberId") || "");
+  const servingRoleId = String(formData.get("servingRoleId") || "");
+
+  if (!tenantSlug || !divisionId || !churchMemberId || !servingRoleId) return;
+
+  const church = await db.church.findUnique({
+    where: { slug: tenantSlug },
+    select: { id: true, slug: true },
+  });
+
+  if (!church) return;
+
+  const divisionMember = await db.divisionMember.findFirst({
+    where: {
+      churchId: church.id,
+      divisionId,
+      churchMemberId,
+    },
+    select: { id: true },
+  });
+
+  const servingRole = await db.servingRole.findFirst({
+    where: {
+      id: servingRoleId,
+      churchId: church.id,
+      divisionId,
+    },
+    select: { id: true },
+  });
+
+  if (!divisionMember || !servingRole) return;
+
+  await db.memberServingRole.upsert({
+    where: {
+      churchMemberId_servingRoleId: {
+        churchMemberId,
+        servingRoleId,
+      },
+    },
+    update: {},
+    create: {
+      churchId: church.id,
+      churchMemberId,
+      servingRoleId,
+    },
+  });
+
+  revalidatePath(`/church/${church.slug}/divisions/${divisionId}`);
+}
+
+async function removeMemberServingRole(formData: FormData) {
+  "use server";
+
+  const tenantSlug = String(formData.get("tenantSlug") || "");
+  const divisionId = String(formData.get("divisionId") || "");
+  const memberServingRoleId = String(formData.get("memberServingRoleId") || "");
+
+  if (!tenantSlug || !divisionId || !memberServingRoleId) return;
+
+  const church = await db.church.findUnique({
+    where: { slug: tenantSlug },
+    select: { id: true, slug: true },
+  });
+
+  if (!church) return;
+
+  const servingRole = await db.memberServingRole.findFirst({
+    where: {
+      id: memberServingRoleId,
+      churchId: church.id,
+      servingRole: {
+        divisionId,
+      },
+    },
+    select: { id: true },
+  });
+
+  if (!servingRole) return;
+
+  await db.memberServingRole.delete({
+    where: {
+      id: servingRole.id,
+    },
+  });
+
+  revalidatePath(`/church/${church.slug}/divisions/${divisionId}`);
 }
 
 export default async function DivisionDetailPage({
@@ -178,6 +379,31 @@ export default async function DivisionDetailPage({
           churchMember: {
             include: {
               user: true,
+              memberServingRoles: {
+                where: {
+                  servingRole: {
+                    divisionId,
+                  },
+                },
+                include: {
+                  servingRole: true,
+                },
+                orderBy: {
+                  createdAt: "asc",
+                },
+              },
+            },
+          },
+        },
+      },
+      servingRoles: {
+        orderBy: {
+          createdAt: "asc",
+        },
+        include: {
+          _count: {
+            select: {
+              memberServingRoles: true,
             },
           },
         },
@@ -221,6 +447,11 @@ export default async function DivisionDetailPage({
     (item) => item.role === "COORDINATOR"
   ).length;
 
+  const assignedServingRoleCount = division.divisionMembers.reduce(
+    (total, item) => total + item.churchMember.memberServingRoles.length,
+    0
+  );
+
   const basePath = `/church/${church.slug}/divisions/${division.id}`;
 
   return (
@@ -244,7 +475,7 @@ export default async function DivisionDetailPage({
                 {division.name}
               </h1>
               <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-black/50">
-                Kelola member dalam divisi ini dan role per divisi. Satu orang bisa menjadi coordinator di divisi ini, tapi member di divisi lain.
+                Kelola member, koordinator, dan serving roles untuk divisi ini.
               </p>
             </div>
 
@@ -261,9 +492,60 @@ export default async function DivisionDetailPage({
         <div className="mb-5 grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
           <MetricCard label="Members" value={String(division.divisionMembers.length)} />
           <MetricCard label="Coordinators" value={String(coordinatorCount)} />
-          <MetricCard label="PIC Name" value={division.picName || "—"} compact />
-          <MetricCard label="PIC Phone" value={division.picPhone || "—"} compact />
+          <MetricCard label="Serving Roles" value={String(division.servingRoles.length)} />
+          <MetricCard label="Assigned Roles" value={String(assignedServingRoleCount)} />
         </div>
+
+        <section className="mb-6 overflow-hidden rounded-[26px] border border-black/10 bg-white shadow-sm">
+          <div className="border-b border-black/10 bg-white p-4 md:flex md:items-center md:justify-between md:gap-4 md:p-5">
+            <div className="mb-4 md:mb-0">
+              <h2 className="text-lg font-black tracking-tight text-black">
+                Serving Roles{" "}
+                <span className="ml-1 text-black/25">
+                  {division.servingRoles.length}
+                </span>
+              </h2>
+              <p className="text-xs font-medium text-black/40">
+                Role pelayanan yang tersedia di divisi {division.name}.
+              </p>
+            </div>
+
+            <form action={createServingRole} className="flex gap-2">
+              <input type="hidden" name="tenantSlug" value={church.slug} />
+              <input type="hidden" name="divisionId" value={division.id} />
+              <input
+                name="name"
+                placeholder="Contoh: Camera 1"
+                className="h-11 min-w-0 flex-1 rounded-2xl border border-black/10 bg-[#FAFAFA] px-4 text-sm font-medium outline-none placeholder:text-black/30 focus:border-black focus:bg-white md:w-[260px]"
+                required
+              />
+              <button
+                type="submit"
+                className="font-mono flex h-11 items-center justify-center gap-2 rounded-2xl bg-black px-4 text-xs font-bold uppercase tracking-[0.1em] text-white hover:bg-black/90"
+              >
+                <Plus className="h-4 w-4" />
+                Add
+              </button>
+            </form>
+          </div>
+
+          {division.servingRoles.length > 0 ? (
+            <div className="grid gap-3 bg-[#FAFAFA] p-3 md:grid-cols-2 xl:grid-cols-3">
+              {division.servingRoles.map((role) => (
+                <ServingRoleCard
+                  key={role.id}
+                  tenantSlug={church.slug}
+                  divisionId={division.id}
+                  role={role}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-[#FAFAFA] px-6 py-12">
+              <EmptyServingRoleState />
+            </div>
+          )}
+        </section>
 
         <section className="overflow-hidden rounded-[26px] border border-black/10 bg-white shadow-sm">
           <div className="border-b border-black/10 bg-white p-4 md:p-5">
@@ -274,7 +556,7 @@ export default async function DivisionDetailPage({
               </span>
             </h2>
             <p className="text-xs font-medium text-black/40">
-              Role di sini khusus untuk divisi {division.name}.
+              Atur role divisi dan kemampuan serving role setiap member.
             </p>
           </div>
 
@@ -286,6 +568,7 @@ export default async function DivisionDetailPage({
                   tenantSlug={church.slug}
                   divisionId={division.id}
                   item={item}
+                  servingRoles={division.servingRoles}
                 />
               ))}
             </div>
@@ -356,72 +639,204 @@ export default async function DivisionDetailPage({
   );
 }
 
+function ServingRoleCard({
+  tenantSlug,
+  divisionId,
+  role,
+}: {
+  tenantSlug: string;
+  divisionId: string;
+  role: {
+    id: string;
+    name: string;
+    _count: {
+      memberServingRoles: number;
+    };
+  };
+}) {
+  return (
+    <div className="rounded-[22px] border border-black/10 bg-white p-4 shadow-sm">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#D4F93A] text-black">
+            <BriefcaseBusiness className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-base font-black tracking-tight text-black">
+              {role.name}
+            </p>
+            <p className="text-xs font-medium text-black/40">
+              {role._count.memberServingRoles} assigned member
+            </p>
+          </div>
+        </div>
+
+        <form action={deleteServingRole}>
+          <input type="hidden" name="tenantSlug" value={tenantSlug} />
+          <input type="hidden" name="divisionId" value={divisionId} />
+          <input type="hidden" name="servingRoleId" value={role.id} />
+          <button
+            type="submit"
+            className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-50 text-red-500 hover:bg-red-100"
+            title="Delete serving role"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </form>
+      </div>
+
+      <MonoPill>{role.name}</MonoPill>
+    </div>
+  );
+}
+
 function DivisionMemberRow({
   tenantSlug,
   divisionId,
   item,
+  servingRoles,
 }: {
   tenantSlug: string;
   divisionId: string;
   item: any;
+  servingRoles: Array<{ id: string; name: string }>;
 }) {
   const user = item.churchMember.user;
+  const assignedRoleIds = item.churchMember.memberServingRoles.map(
+    (memberRole: any) => memberRole.servingRoleId
+  );
+
+  const availableServingRoles = servingRoles.filter(
+    (role) => !assignedRoleIds.includes(role.id)
+  );
 
   return (
-    <div className="grid gap-4 bg-white p-4 md:grid-cols-[1fr_220px_96px] md:items-center md:p-5">
-      <div className="flex min-w-0 items-center gap-3">
-        <Avatar name={user.name || user.email} />
-        <div className="min-w-0">
-          <p className="truncate text-sm font-black tracking-tight text-black">
-            {user.name || "-"}
-          </p>
-          <p className="truncate text-xs font-medium text-black/45">
-            {user.email}
-          </p>
-          <div className="mt-1">
-            <MonoPill>{item.churchMember.memberCode || "NO NIJ"}</MonoPill>
+    <div className="grid gap-4 bg-white p-4 md:p-5">
+      <div className="grid gap-4 md:grid-cols-[1fr_220px_96px] md:items-center">
+        <div className="flex min-w-0 items-center gap-3">
+          <Avatar name={user.name || user.email} />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-black tracking-tight text-black">
+              {user.name || "-"}
+            </p>
+            <p className="truncate text-xs font-medium text-black/45">
+              {user.email}
+            </p>
+            <div className="mt-1">
+              <MonoPill>{item.churchMember.memberCode || "NO NIJ"}</MonoPill>
+            </div>
           </div>
         </div>
+
+        <form action={updateDivisionMemberRole} className="flex gap-2">
+          <input type="hidden" name="tenantSlug" value={tenantSlug} />
+          <input type="hidden" name="divisionId" value={divisionId} />
+          <input type="hidden" name="divisionMemberId" value={item.id} />
+
+          <select
+            name="role"
+            defaultValue={item.role}
+            className="h-10 min-w-0 flex-1 rounded-2xl border border-black/10 bg-[#FAFAFA] px-3 text-sm font-medium outline-none focus:border-black focus:bg-white"
+          >
+            {divisionRoles.map((role) => (
+              <option key={role} value={role}>
+                {role}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="submit"
+            className="font-mono h-10 rounded-2xl bg-black px-4 text-xs font-bold uppercase tracking-[0.1em] text-white"
+          >
+            Save
+          </button>
+        </form>
+
+        <form action={removeDivisionMember} className="md:justify-self-end">
+          <input type="hidden" name="tenantSlug" value={tenantSlug} />
+          <input type="hidden" name="divisionId" value={divisionId} />
+          <input type="hidden" name="divisionMemberId" value={item.id} />
+
+          <button
+            type="submit"
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-red-50 px-4 text-sm font-bold text-red-600 hover:bg-red-100 md:w-10 md:px-0"
+          >
+            <Trash2 className="h-4 w-4" />
+            <span className="md:hidden">Remove</span>
+          </button>
+        </form>
       </div>
 
-      <form action={updateDivisionMemberRole} className="flex gap-2">
-        <input type="hidden" name="tenantSlug" value={tenantSlug} />
-        <input type="hidden" name="divisionId" value={divisionId} />
-        <input type="hidden" name="divisionMemberId" value={item.id} />
+      <div className="rounded-[22px] bg-[#FAFAFA] p-3">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-black/35">
+              Serving Roles
+            </p>
+            <p className="text-xs font-medium text-black/40">
+              Kemampuan pelayanan member ini di divisi ini.
+            </p>
+          </div>
+        </div>
 
-        <select
-          name="role"
-          defaultValue={item.role}
-          className="h-10 min-w-0 flex-1 rounded-2xl border border-black/10 bg-[#FAFAFA] px-3 text-sm font-medium outline-none focus:border-black focus:bg-white"
-        >
-          {divisionRoles.map((role) => (
-            <option key={role} value={role}>
-              {role}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-wrap gap-2">
+          {item.churchMember.memberServingRoles.length > 0 ? (
+            item.churchMember.memberServingRoles.map((memberRole: any) => (
+              <form key={memberRole.id} action={removeMemberServingRole}>
+                <input type="hidden" name="tenantSlug" value={tenantSlug} />
+                <input type="hidden" name="divisionId" value={divisionId} />
+                <input
+                  type="hidden"
+                  name="memberServingRoleId"
+                  value={memberRole.id}
+                />
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-bold text-black/60 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                >
+                  <BadgeCheck className="h-3.5 w-3.5" />
+                  {memberRole.servingRole.name}
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </form>
+            ))
+          ) : (
+            <span className="text-sm font-medium text-black/35">
+              Belum punya serving role.
+            </span>
+          )}
+        </div>
 
-        <button
-          type="submit"
-          className="font-mono h-10 rounded-2xl bg-black px-4 text-xs font-bold uppercase tracking-[0.1em] text-white"
-        >
-          Save
-        </button>
-      </form>
+        {availableServingRoles.length > 0 && (
+          <form action={assignMemberServingRole} className="mt-3 flex gap-2">
+            <input type="hidden" name="tenantSlug" value={tenantSlug} />
+            <input type="hidden" name="divisionId" value={divisionId} />
+            <input
+              type="hidden"
+              name="churchMemberId"
+              value={item.churchMemberId}
+            />
+            <select
+              name="servingRoleId"
+              className="h-10 min-w-0 flex-1 rounded-2xl border border-black/10 bg-white px-3 text-sm font-medium outline-none focus:border-black"
+            >
+              {availableServingRoles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.name}
+                </option>
+              ))}
+            </select>
 
-      <form action={removeDivisionMember} className="md:justify-self-end">
-        <input type="hidden" name="tenantSlug" value={tenantSlug} />
-        <input type="hidden" name="divisionId" value={divisionId} />
-        <input type="hidden" name="divisionMemberId" value={item.id} />
-
-        <button
-          type="submit"
-          className="flex h-10 w-full items-center justify-center gap-2 rounded-2xl bg-red-50 px-4 text-sm font-bold text-red-600 hover:bg-red-100 md:w-10 md:px-0"
-        >
-          <Trash2 className="h-4 w-4" />
-          <span className="md:hidden">Remove</span>
-        </button>
-      </form>
+            <button
+              type="submit"
+              className="font-mono h-10 rounded-2xl bg-black px-4 text-xs font-bold uppercase tracking-[0.1em] text-white"
+            >
+              Assign
+            </button>
+          </form>
+        )}
+      </div>
     </div>
   );
 }
@@ -484,22 +899,16 @@ function AvailableMemberCard({
 function MetricCard({
   label,
   value,
-  compact,
 }: {
   label: string;
   value: string;
-  compact?: boolean;
 }) {
   return (
     <div className="rounded-2xl border border-black/10 bg-white p-3 shadow-sm md:p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-black/35">
         {label}
       </p>
-      <p
-        className={`mt-1 truncate font-black tracking-tight text-black ${
-          compact ? "text-base" : "text-2xl"
-        }`}
-      >
+      <p className="mt-1 truncate text-2xl font-black tracking-tight text-black">
         {value}
       </p>
     </div>
@@ -531,6 +940,20 @@ function EmptyState() {
       <p className="text-base font-black text-black">No member assigned</p>
       <p className="mt-1 text-sm font-medium text-black/45">
         Klik Assign Member untuk menambahkan orang ke divisi ini.
+      </p>
+    </div>
+  );
+}
+
+function EmptyServingRoleState() {
+  return (
+    <div className="mx-auto flex max-w-sm flex-col items-center justify-center text-center">
+      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-black/5 text-black/30">
+        <BriefcaseBusiness className="h-6 w-6" />
+      </div>
+      <p className="text-base font-black text-black">No serving role yet</p>
+      <p className="mt-1 text-sm font-medium text-black/45">
+        Tambahkan role seperti Switcher, Camera 1, Singer, Keyboardist, atau Usher.
       </p>
     </div>
   );

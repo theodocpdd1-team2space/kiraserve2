@@ -241,7 +241,7 @@ export default async function DivisionsPage({ params, searchParams }: PageProps)
 
         {(addOpen || editDivision) && (
           <ModalShell closeHref={basePath}>
-            <div className="max-h-[88vh] w-full max-w-3xl overflow-hidden rounded-[30px] bg-white shadow-2xl">
+            <div className="mx-auto max-h-[88vh] w-full max-w-3xl overflow-hidden rounded-[30px] bg-white shadow-2xl">
               <div className="border-b border-black/5 p-5 md:p-7">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -440,9 +440,12 @@ function ModalShell({
   closeHref: string;
 }) {
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/35 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/35 px-4 py-6 backdrop-blur-sm">
       <Link href={closeHref} className="absolute inset-0" scroll={false} />
-      <div className="relative z-10 w-full">{children}</div>
+
+      <div className="relative z-10 flex w-full items-center justify-center">
+        {children}
+      </div>
     </div>
   );
 }

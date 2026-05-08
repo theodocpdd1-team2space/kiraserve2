@@ -6,7 +6,12 @@ export type ChurchAccess = {
   churchId: string;
   tenantSlug: string;
   churchName: string;
-  role: "CHURCH_OWNER" | "CHURCH_ADMIN" | "DIVISION_COORDINATOR" | "SERVANT" | "MEMBER";
+  role:
+    | "CHURCH_OWNER"
+    | "CHURCH_ADMIN"
+    | "DIVISION_COORDINATOR"
+    | "SERVANT"
+    | "MEMBER";
   coordinatedDivisionIds: string[];
   memberDivisionIds: string[];
   isOwner: boolean;
@@ -31,11 +36,14 @@ type AccessInput = {
 };
 
 /**
- * DEVELOPMENT FALLBACK:
- * Selama auth/session belum final, helper ini akan memakai member pertama
- * dalam church sebagai current user.
+ * TEMP DEV ACCESS MODE
+ * Permission final sengaja belum dipaksa.
+ * Tujuannya supaya halaman admin tetap bisa dibuka selama development fitur.
  *
- * Nanti setelah NextAuth aman, kita ganti fallback ini menjadi session user.
+ * Kalau DEV_TEST_USER_EMAIL di .env diisi, sistem akan pakai user itu.
+ * Kalau kosong, sistem pakai church member pertama dari tenant.
+ *
+ * Nanti setelah auth/session final, file ini baru diketatkan lagi.
  */
 export async function getChurchAccess({
   tenantSlug,
@@ -80,8 +88,6 @@ export async function getChurchAccess({
 
   if (!churchMember) return null;
 
-  // lanjutkan isi lama di bawahnya...
-
   const coordinatedDivisionIds = churchMember.divisionMembers
     .filter((item) => item.role === "COORDINATOR")
     .map((item) => item.divisionId);
@@ -98,14 +104,19 @@ export async function getChurchAccess({
   const isServant = churchMember.role === "SERVANT";
   const isMember = churchMember.role === "MEMBER";
 
-  const canManageChurch = isOwner || isAdmin;
-  const canViewAdminWorkspace = isOwner || isAdmin || isCoordinator;
-  const canViewMembers = isOwner || isAdmin;
-  const canManageMembers = isOwner || isAdmin;
-  const canViewAllDivisions = isOwner || isAdmin;
-  const canManageAllDivisions = isOwner || isAdmin;
-  const canViewBilling = isOwner;
-  const canViewSettings = isOwner || isAdmin;
+  /**
+   * TEMP DEV:
+   * Semua akses admin dibuat true dulu supaya development tidak mental/redirect.
+   * Permission final nanti setelah auth/session login rapi.
+   */
+  const canManageChurch = true;
+  const canViewAdminWorkspace = true;
+  const canViewMembers = true;
+  const canManageMembers = true;
+  const canViewAllDivisions = true;
+  const canManageAllDivisions = true;
+  const canViewBilling = true;
+  const canViewSettings = true;
 
   return {
     userId: churchMember.userId,
@@ -138,30 +149,16 @@ export async function requireChurchAccess(tenantSlug: string) {
     redirect(`/login?next=/church/${tenantSlug}/dashboard`);
   }
 
-  if (!access.canViewAdminWorkspace) {
-    redirect(`/church/${tenantSlug}/me`);
-  }
-
   return access;
 }
 
 export async function requireChurchAdminAccess(tenantSlug: string) {
   const access = await requireChurchAccess(tenantSlug);
-
-  if (!access.canManageChurch) {
-    redirect(`/church/${tenantSlug}/dashboard`);
-  }
-
   return access;
 }
 
 export async function requireMembersAccess(tenantSlug: string) {
   const access = await requireChurchAccess(tenantSlug);
-
-  if (!access.canViewMembers) {
-    redirect(`/church/${tenantSlug}/dashboard`);
-  }
-
   return access;
 }
 
@@ -170,43 +167,17 @@ export async function requireDivisionAccess(
   divisionId: string
 ) {
   const access = await requireChurchAccess(tenantSlug);
-
-  if (access.canViewAllDivisions) {
-    return access;
-  }
-
-  if (!access.coordinatedDivisionIds.includes(divisionId)) {
-    redirect(`/church/${tenantSlug}/divisions`);
-  }
-
   return access;
 }
 
 export function canManageDivision(access: ChurchAccess, divisionId: string) {
-  if (access.canManageAllDivisions) return true;
-  return access.coordinatedDivisionIds.includes(divisionId);
+  return true;
 }
 
 export function getAllowedDivisionWhere(access: ChurchAccess) {
-  if (access.canViewAllDivisions) {
-    return {};
-  }
-
-  return {
-    id: {
-      in: access.coordinatedDivisionIds,
-    },
-  };
+  return {};
 }
 
 export function getAllowedDivisionMemberWhere(access: ChurchAccess) {
-  if (access.canViewAllDivisions) {
-    return {};
-  }
-
-  return {
-    divisionId: {
-      in: access.coordinatedDivisionIds,
-    },
-  };
+  return {};
 }

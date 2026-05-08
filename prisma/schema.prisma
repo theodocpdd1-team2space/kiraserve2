@@ -86,6 +86,8 @@ model Church {
   members            ChurchMember[]
   divisions          ChurchDivision[]
   divisionMembers    DivisionMember[]
+  servingRoles       ServingRole[]
+  memberServingRoles MemberServingRole[]
   subscriptions      Subscription[]
   activationRequests ActivationRequest[]
 }
@@ -103,7 +105,8 @@ model ChurchMember {
   church Church @relation(fields: [churchId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  divisionMembers DivisionMember[]
+  divisionMembers    DivisionMember[]
+  memberServingRoles MemberServingRole[]
 
   @@unique([churchId, userId])
   @@unique([churchId, memberCode])
@@ -125,6 +128,7 @@ model ChurchDivision {
   church Church @relation(fields: [churchId], references: [id], onDelete: Cascade)
 
   divisionMembers DivisionMember[]
+  servingRoles    ServingRole[]
 
   @@index([churchId])
 }
@@ -165,15 +169,15 @@ model Plan {
 
 model Subscription {
   id                 String             @id @default(cuid())
-  churchId            String
-  planCode            String
-  status              SubscriptionStatus @default(TRIALING)
-  trialStartedAt      DateTime?
-  trialEndsAt         DateTime?
-  currentPeriodStart  DateTime?
-  currentPeriodEnd    DateTime?
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
+  churchId           String
+  planCode           String
+  status             SubscriptionStatus @default(TRIALING)
+  trialStartedAt     DateTime?
+  trialEndsAt        DateTime?
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   church Church @relation(fields: [churchId], references: [id], onDelete: Cascade)
   plan   Plan   @relation(fields: [planCode], references: [code])
@@ -184,12 +188,12 @@ model Subscription {
 
 model ActivationRequest {
   id               String        @id @default(cuid())
-  churchId          String?
-  planCode          String
-  paymentStatus     PaymentStatus @default(DUMMY)
-  activationStatus  String        @default("draft")
-  rawPayload        Json?
-  createdAt         DateTime      @default(now())
+  churchId         String?
+  planCode         String
+  paymentStatus    PaymentStatus @default(DUMMY)
+  activationStatus String        @default("draft")
+  rawPayload       Json?
+  createdAt        DateTime      @default(now())
 
   church Church? @relation(fields: [churchId], references: [id], onDelete: SetNull)
   plan   Plan    @relation(fields: [planCode], references: [code])
