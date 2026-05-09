@@ -7,6 +7,7 @@ import {
   CreditCard,
   Database,
   Home,
+  LogOut,
   MoreHorizontal,
   Network,
   Plus,
@@ -17,6 +18,7 @@ import {
 } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireChurchAccess } from "@/lib/church-access";
+import { logout } from "@/lib/auth-actions";
 
 type ChurchAppShellProps = {
   tenantSlug: string;
@@ -206,6 +208,16 @@ export default async function ChurchAppShell({
                     {church.name.charAt(0).toUpperCase()}
                   </span>
                 </div>
+
+                <form action={logout}>
+                  <button
+                    type="submit"
+                    className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-black/45 shadow-sm ring-1 ring-black/[0.06] transition hover:bg-black hover:text-white"
+                    title="Logout"
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </button>
+                </form>
               </div>
             </div>
           </header>

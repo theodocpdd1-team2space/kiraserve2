@@ -41,6 +41,25 @@ enum DivisionMemberRole {
   MEMBER
 }
 
+enum ScheduleTableType {
+  SINGLE_SESSION
+  WEEKLY_BY_DATE
+  MULTI_SERVICE_DAY
+  MONTHLY_MULTI_SERVICE
+  CUSTOM_TABLE
+}
+
+enum ScheduleVisibility {
+  PRIVATE
+  PUBLIC_LINK
+}
+
+enum DivisionScheduleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 enum SubscriptionStatus {
   TRIALING
   ACTIVE
@@ -66,6 +85,7 @@ model User {
   updatedAt    DateTime @updatedAt
 
   churchMembers ChurchMember[]
+  authSessions  AuthSession[]
 }
 
 model Church {
@@ -86,6 +106,7 @@ model Church {
   members            ChurchMember[]
   divisions          ChurchDivision[]
   divisionMembers    DivisionMember[]
+  divisionSchedules  DivisionSchedule[]
   servingRoles       ServingRole[]
   memberServingRoles MemberServingRole[]
   subscriptions      Subscription[]
@@ -129,6 +150,7 @@ model ChurchDivision {
 
   divisionMembers DivisionMember[]
   servingRoles    ServingRole[]
+  schedules       DivisionSchedule[]
 
   @@index([churchId])
 }
@@ -236,4 +258,60 @@ model MemberServingRole {
   @@index([churchId])
   @@index([churchMemberId])
   @@index([servingRoleId])
+}
+
+model AuthSession {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model LoginOtp {
+  id         String    @id @default(cuid())
+  email      String
+  codeHash   String
+  purpose    String    @default("LOGIN")
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  @@index([email])
+  @@index([expiresAt])
+}
+
+
+model DivisionSchedule {
+  id          String                 @id @default(cuid())
+  churchId    String
+  divisionId  String
+  title       String
+  serviceDate DateTime
+  startTime   String?
+  endTime     String?
+  location    String?
+  notes       String?
+  status      DivisionScheduleStatus @default(DRAFT)
+  scheduleType ScheduleTableType       @default(WEEKLY_BY_DATE)
+  visibility   ScheduleVisibility      @default(PRIVATE)
+  shareSlug    String?                 @unique
+  tableJson    Json?
+  reminderEnabled Boolean              @default(false)
+  reminderRules   Json?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @default(now()) @updatedAt
+
+  church   Church         @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  division ChurchDivision @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+
+  @@index([churchId])
+  @@index([divisionId])
+  @@index([serviceDate])
+  @@index([status])
 }

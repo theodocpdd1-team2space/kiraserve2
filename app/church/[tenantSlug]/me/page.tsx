@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CalendarCheck, Network, UserRound, MessageSquareText } from "lucide-react";
 import ChurchAppShell from "@/components/ChurchAppShell";
 import { requireChurchAccess } from "@/lib/church-access";
+import { db } from "@/lib/db";
 
 type PageProps = {
   params: Promise<{ tenantSlug: string }>;
@@ -10,6 +11,22 @@ type PageProps = {
 export default async function MyPortalPage({ params }: PageProps) {
   const { tenantSlug } = await params;
   const access = await requireChurchAccess(tenantSlug);
+  const member = await db.churchMember.findFirst({
+    where: {
+      churchId: access.churchId,
+      userId: access.userId,
+    },
+    select: {
+      status: true,
+      memberCode: true,
+      user: {
+        select: {
+          name: true,
+          email: true,
+        },
+      },
+    },
+  });
 
   const cards = [
     {
@@ -60,6 +77,20 @@ export default async function MyPortalPage({ params }: PageProps) {
           <p className="mt-1 text-2xl font-black text-black">
             {access.role.replaceAll("_", " ")}
           </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="font-mono rounded-full border border-black/10 bg-[#FAFAFA] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-black/45">
+              {member?.status || "UNKNOWN"}
+            </span>
+            <span className="font-mono rounded-full border border-black/10 bg-[#FAFAFA] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-black/45">
+              {member?.memberCode || "NO NIJ"}
+            </span>
+          </div>
+          {member?.status !== "ACTIVE" && (
+            <div className="mt-4 rounded-2xl border border-[#D4F93A] bg-[#D4F93A]/25 p-4 text-sm font-bold leading-relaxed text-black">
+              Akun kamu sudah terdaftar dan sedang menunggu approval admin.
+              NIJ akan muncul setelah admin approve.
+            </div>
+          )}
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">

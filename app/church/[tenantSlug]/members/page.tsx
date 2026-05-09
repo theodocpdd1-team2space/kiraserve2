@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireMembersAccess } from "@/lib/church-access";
 import {
   Archive,
+  Check,
   Mail,
   Pencil,
   Phone,
@@ -12,6 +13,7 @@ import {
   Search,
   ShieldCheck,
   SlidersHorizontal,
+  UserPlus,
   UsersRound,
   X,
 } from "lucide-react";
@@ -335,6 +337,76 @@ async function archiveMember(formData: FormData) {
   revalidatePath(`/church/${church.slug}/dashboard`);
 }
 
+async function approveMember(formData: FormData) {
+  "use server";
+
+  const tenantSlug = String(formData.get("tenantSlug") || "");
+  const churchMemberId = String(formData.get("churchMemberId") || "");
+
+  if (!tenantSlug || !churchMemberId) return;
+
+  const church = await db.church.findUnique({
+    where: { slug: tenantSlug },
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      memberCodePrefix: true,
+      memberCodeNextNumber: true,
+      memberCodeMode: true,
+    },
+  });
+
+  if (!church) return;
+
+  const member = await db.churchMember.findFirst({
+    where: {
+      id: churchMemberId,
+      churchId: church.id,
+    },
+    select: {
+      id: true,
+      memberCode: true,
+    },
+  });
+
+  if (!member) return;
+
+  let memberCode = member.memberCode;
+  let shouldIncrementCode = false;
+
+  if (!memberCode && church.memberCodeMode === "AUTO_GENERATE") {
+    const prefix =
+      church.memberCodePrefix || makePrefix(church.name, church.slug);
+    memberCode = buildMemberCode(prefix, church.memberCodeNextNumber);
+    shouldIncrementCode = true;
+  }
+
+  await db.churchMember.update({
+    where: { id: member.id },
+    data: {
+      status: "ACTIVE",
+      ...(memberCode ? { memberCode } : {}),
+    },
+  });
+
+  if (shouldIncrementCode) {
+    await db.church.update({
+      where: { id: church.id },
+      data: {
+        memberCodePrefix:
+          church.memberCodePrefix || makePrefix(church.name, church.slug),
+        memberCodeNextNumber: {
+          increment: 1,
+        },
+      },
+    });
+  }
+
+  revalidatePath(`/church/${church.slug}/members`);
+  revalidatePath(`/church/${church.slug}/dashboard`);
+}
+
 export default async function MembersPage({ params, searchParams }: PageProps) {
   const { tenantSlug } = await params;
   await requireMembersAccess(tenantSlug);
@@ -406,6 +478,7 @@ export default async function MembersPage({ params, searchParams }: PageProps) {
   );
 
   const activeCount = church.members.filter((m) => m.status === "ACTIVE").length;
+  const pendingCount = church.members.filter((m) => m.status === "INVITED").length;
   const servantCount = church.members.filter((m) => m.role === "SERVANT").length;
   const coordinatorCount = church.members.filter(
     (m) =>
@@ -472,6 +545,14 @@ export default async function MembersPage({ params, searchParams }: PageProps) {
           </div>
 
           <div className="flex w-full gap-2 md:w-auto">
+            <Link
+              href={`/church/${church.slug}/join`}
+              className="font-mono flex h-11 flex-1 items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white px-4 text-xs font-bold uppercase tracking-[0.08em] text-black shadow-sm transition hover:bg-black/[0.03] md:flex-none"
+            >
+              <UserPlus className="h-4 w-4" />
+              Register
+            </Link>
+
             <div className="relative flex-1 md:flex-none">
               <Link
                 href={openFiltersUrl}
@@ -585,9 +666,10 @@ export default async function MembersPage({ params, searchParams }: PageProps) {
           </div>
         </div>
 
-        <div className="mb-5 grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
+        <div className="mb-5 grid grid-cols-2 gap-2 md:grid-cols-5 md:gap-3">
           <MetricCard label="All" value={String(church._count.members)} />
           <MetricCard label="Active" value={String(activeCount)} />
+          <MetricCard label="Pending" value={String(pendingCount)} />
           <MetricCard label="Servants" value={String(servantCount)} />
           <MetricCard label="Leaders" value={String(coordinatorCount)} />
         </div>
@@ -864,7 +946,7 @@ function ModalShell({
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/35 p-4 backdrop-blur-sm">
       <Link href={closeHref} className="absolute inset-0" scroll={false} />
-      <div className="relative z-10 w-full">{children}</div>
+      <div className="relative z-10 flex w-full justify-center">{children}</div>
     </div>
   );
 }
@@ -972,6 +1054,20 @@ function MemberTableRow({
 
       <td className="px-4 py-4 text-right">
         <div className="flex items-center justify-end gap-1 opacity-100 md:opacity-0 md:transition-opacity md:group-hover:opacity-100">
+          {member.status === "INVITED" && (
+            <form action={approveMember}>
+              <input type="hidden" name="tenantSlug" value={churchSlug} />
+              <input type="hidden" name="churchMemberId" value={member.id} />
+              <button
+                type="submit"
+                className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#D4F93A] text-black hover:bg-[#c5ee28]"
+                title="Approve member"
+              >
+                <Check className="h-4 w-4" />
+              </button>
+            </form>
+          )}
+
           <Link
             href={`/church/${churchSlug}/members?edit=${member.id}`}
             className="flex h-8 w-8 items-center justify-center rounded-xl bg-black/5 text-black/50 hover:bg-black/10 hover:text-black"
@@ -1010,6 +1106,20 @@ function MemberMobileCard({
         <MonoPill>{member.memberCode || "NO NIJ"}</MonoPill>
 
         <div className="flex shrink-0 gap-1">
+          {member.status === "INVITED" && (
+            <form action={approveMember}>
+              <input type="hidden" name="tenantSlug" value={churchSlug} />
+              <input type="hidden" name="churchMemberId" value={member.id} />
+              <button
+                type="submit"
+                className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#D4F93A] text-black hover:bg-[#c5ee28]"
+                title="Approve member"
+              >
+                <Check className="h-4 w-4" />
+              </button>
+            </form>
+          )}
+
           <Link
             href={`/church/${churchSlug}/members?edit=${member.id}`}
             className="flex h-8 w-8 items-center justify-center rounded-xl bg-black/5 text-black/50 hover:bg-black/10 hover:text-black"

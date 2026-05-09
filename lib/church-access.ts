@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
 
 export type ChurchAccess = {
   userId: string;
@@ -50,8 +51,11 @@ export async function getChurchAccess({
   userEmail,
   userId,
 }: AccessInput): Promise<ChurchAccess | null> {
+  const sessionUser = userId ? null : await getCurrentUser();
   const devTestUserEmail = process.env.DEV_TEST_USER_EMAIL || null;
-  const effectiveUserEmail = userEmail || devTestUserEmail;
+  const effectiveUserId = userId || sessionUser?.id || null;
+  const effectiveUserEmail =
+    userEmail || (!effectiveUserId ? devTestUserEmail : null);
 
   const church = await db.church.findUnique({
     where: { slug: tenantSlug },
@@ -67,7 +71,7 @@ export async function getChurchAccess({
   const churchMember = await db.churchMember.findFirst({
     where: {
       churchId: church.id,
-      ...(userId ? { userId } : {}),
+      ...(effectiveUserId ? { userId: effectiveUserId } : {}),
       ...(effectiveUserEmail
         ? { user: { email: effectiveUserEmail.toLowerCase() } }
         : {}),
